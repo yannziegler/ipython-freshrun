@@ -1,0 +1,19 @@
+# Python things to ignore
+build/
+dist/
+*.egg-info/
+*.egg
+*.py[cod]
+__pycache__/
+
+# Others
+*.so
+
+# tmp files
+*~
+\#*\#
+.\#*
+
+# Custom folders
+tmp/
+old/

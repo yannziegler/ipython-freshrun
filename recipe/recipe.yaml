@@ -1,0 +1,58 @@
+schema_version: 1
+
+context:
+  name: ipython-freshrun
+  version: 0.1.0b0
+  python_min: "3.13"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+# Online source
+# source:
+#   url: https://pypi.org/packages/source/i/ipython-freshrun/ipython-freshrun-${{ version }}.tar.gz
+#   sha256: REPLACE_WITH_SHA256
+#   # curl -LO https://pypi.org/packages/source/i/ipython-freshrun/ipython-freshrun-0.1.0b0.tar.gz
+#   # openssl sha256 ipython-freshrun-0.1.0b0.tar.gz
+
+# Local source
+source:
+  path: ..
+
+build:
+  noarch: python
+  number: 0
+  script: ${{ PYTHON }} -m pip install . -vv
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - hatchling
+
+  run:
+    - python >=${{ python_min }}
+    - ipython >=9,<10
+    - prompt-toolkit >=3.0
+    - pygments >=2.0
+
+tests:
+  - python:
+      python_version:
+        - ${{ python_min }}.*
+        - "*"
+      imports:
+        - freshrun
+      pip_check: true
+
+about:
+  homepage: https://github.com/yannziegler/ipython-freshrun
+  repository: https://github.com/yannziegler/ipython-freshrun
+  license: EUPL-1.2
+  license_file: LICENSE
+  summary: Run Python scripts in genuinely fresh interactive IPython sessions
+
+extra:
+  recipe-maintainers:
+    - yannziegler
