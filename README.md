@@ -136,7 +136,9 @@ The package requires a recent Python and IPython installation.
 
 ### Conda
 
-Install from conda-forge:
+**Note: `ipython-freshrun` is *not* yet available on conda-forge.**
+
+In a near future, you should be able to install it using:
 
 ```bash
 conda install -c conda-forge ipython-freshrun

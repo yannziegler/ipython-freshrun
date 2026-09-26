@@ -10,15 +10,15 @@ package:
   version: ${{ version }}
 
 # Online source
-# source:
-#   url: https://pypi.org/packages/source/i/ipython-freshrun/ipython-freshrun-${{ version }}.tar.gz
-#   sha256: REPLACE_WITH_SHA256
+source:
+  url: https://pypi.org/packages/source/i/ipython-freshrun/ipython-freshrun-${{ version }}.tar.gz
+  sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 #   # curl -LO https://pypi.org/packages/source/i/ipython-freshrun/ipython-freshrun-0.1.0b0.tar.gz
 #   # openssl sha256 ipython-freshrun-0.1.0b0.tar.gz
 
 # Local source
-source:
-  path: ..
+# source:
+#   path: ..
 
 build:
   noarch: python
