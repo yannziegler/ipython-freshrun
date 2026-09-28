@@ -5,10 +5,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ipython-freshrun"
-version = "0.1.0b0"
+version = "0.1.0b1"
 description = "Run Python scripts in genuinely fresh interactive IPython sessions"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 license = "EUPL-1.2"
 license-files = { file = "LICEN[CS]E*" }
 authors = [
@@ -30,6 +30,9 @@ classifiers = [
     "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Debuggers",
