@@ -196,7 +196,11 @@ def _capture_main(frame, event, arg):
 
         exception = arg[1]
 
-        if exception is _exception_identity:
+        # if exception is _exception_identity:
+        if (
+            exception is _exception_identity
+            and not isinstance(exception, KeyboardInterrupt)
+        ):
             return _capture_main
 
         _exception_identity = exception
