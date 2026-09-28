@@ -18,7 +18,7 @@ The main motivation is to make it easy and reliable to repeatedly run a script f
 - Recall the most recent `%freshrun` command with **Page Up** or **Alt+Up**.
 - Preserve normal IPython `%run` argument handling.
 - Support IPython's `-d` / `--pdb` debugging mode.
-- When running a script (with or without `-d`), capture the final locals from `main()` and make them available in the current namespace.
+- When running a script (with or without `-d`), capture both its globals and the final locals from `main()` (or another entry-point function) and make them available in the current namespace.
 - Capture locals from the Python call chain when an exception occurs (including `KeyboardInterrupt`) and store them in a dedicated `_exception_locals` dictionary for in-depth inspection.
 - After an exception has occurred, pull locals from specific functions or methods directly into the current namespace for easy inspection with `%pull`.
 - Similarly, inject all entries from any dictionary into the current namespace with `%inject`.
@@ -315,6 +315,8 @@ Both magics are available in the parent IPython session and fresh child sessions
 When a conventional script contains:
 
 ```
+A = 'global'
+
 def main():
     x = 123
     y = "hello"
@@ -323,21 +325,21 @@ if __name__ == "__main__":
     main()
 ```
 
-`%freshrun` captures the final local variables from `main()`.
+`%freshrun` captures the script global variables, as well as the final local variables from the entry-point function (usually `main()`, but not necessarily).
 
-Those variables are copied into the child IPython namespace after `main()` returns.
+Those variables are copied into the child IPython namespace after return.
 
 The complete captured dictionary is also available as:
 
 ```
-_main_locals
+_script_locals
 ```
 
 For example:
 
 ```
-In [1]: _main_locals
-Out[1]: {'x': 123, 'y': 'hello'}
+In [1]: _script_locals
+Out[1]: {'A': 'global', 'x': 123, 'y': 'hello'}
 ```
 
 The capture is specifically concerned with the script being executed. It does not attempt to serialize arbitrary Python objects between processes; the objects remain in the child process where they were created.

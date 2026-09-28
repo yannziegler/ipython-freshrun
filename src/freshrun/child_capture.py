@@ -23,6 +23,7 @@ else:
     _application_root = _script_directory
 
 _main_locals = {}
+_script_globals = {}
 _exception_locals = {}
 
 _debug_mode = RUN_DEBUG_MODE
@@ -127,18 +128,37 @@ def _copy_frame_locals(frame):
 
     return dict(frame.f_locals)
 
+_main_code = None
 
 def _capture_main(frame, event, arg):
-    global _exception_identity
+    global _exception_identity, _main_code
 
     # Only trace frames belonging to the script being executed.
     # if os.path.abspath(code.co_filename) != _script_to_watch:
     #     return None
-    if not _is_application_frame(frame):
-        # return _capture_main
-        return None
+    #if not _is_application_frame(frame):
+    #    # return _capture_main
+    #    return None
 
-    code = frame.f_code
+    # code = frame.f_code
+
+    if event == "call":
+        # A function called directly by the script's module-level code
+        # is the script's entry point, regardless of its name.
+        caller = frame.f_back
+
+        if (
+            _main_code is None
+            and caller is not None
+            and caller.f_code.co_name == "<module>"
+            and os.path.abspath(caller.f_code.co_filename)
+            == _script_to_watch
+            and os.path.abspath(frame.f_code.co_filename)
+            == _script_to_watch
+        ):
+            _main_code = frame.f_code
+
+        return _capture_main
 
     # -----------------------------------------------------------------------
     # Exception event
@@ -171,8 +191,8 @@ def _capture_main(frame, event, arg):
         #     frame.f_code.co_name,
         # )
 
-        # if not _is_application_frame(frame):
-        #     return _capture_main
+        if not _is_application_frame(frame):
+            return _capture_main
 
         exception = arg[1]
 
@@ -220,8 +240,19 @@ def _capture_main(frame, event, arg):
                     _frame_name(current_frame)
                 ] = locals_copy
 
-                if current_code.co_name == "main":
+                if (
+                    _main_code is not None
+                    and current_frame.f_code is _main_code
+                ):
+                #if current_code.co_name == "main":
+                    _main_locals.clear()
                     _main_locals.update(locals_copy)
+
+                    _main_locals.update({
+                        key: value
+                        for key, value in frame.f_globals.items()
+                        if key not in _main_locals
+                    })
                     break
 
             current_frame = current_frame.f_back
@@ -231,14 +262,34 @@ def _capture_main(frame, event, arg):
     # -----------------------------------------------------------------------
     # Return from main()
     # -----------------------------------------------------------------------
+    
+    if event == "return":
+        #if _main_code is not None and frame.f_code is _main_code:
+       # The module frame contains the actual globals created by the
+       # script. _copy_frame_locals() removes Python/IPython dunder
+       # machinery, so don't use frame.f_globals here.
+       if (
+           frame.f_code.co_name == "<module>"
+           and os.path.abspath(frame.f_code.co_filename)
+           == _script_to_watch
+       ):
+           _script_globals.clear()
+           _script_globals.update(
+               _copy_frame_locals(frame)
+           )
+       elif _main_code is not None and frame.f_code is _main_code:
+            _main_locals.clear()
+            _main_locals.update(_copy_frame_locals(frame))
 
-    if event == "return" and _is_main_frame(frame):
-        _main_locals.clear()
-        _main_locals.update(
-            _copy_frame_locals(frame)
-        )
+       return _capture_main
 
-        return _capture_main
+    # if event == "return" and _is_main_frame(frame):
+    #     _main_locals.clear()
+    #     _main_locals.update(
+    #         _copy_frame_locals(frame)
+    #     )
+
+    #     return _capture_main
 
     # -----------------------------------------------------------------------
     # Continue tracing this frame.
@@ -381,11 +432,18 @@ else:
 # %run has already exposed top-level variables in the IPython namespace.
 # ---------------------------------------------------------------------------
 
-if _main_locals:
-    shell.user_ns.update(_main_locals)
+#if _main_locals:
+#    shell.user_ns.update(_main_locals)
 
-shell.user_ns["_script_locals"] = dict(_main_locals)
+#shell.user_ns["_script_locals"] = dict(_main_locals)
 
+script_locals = dict(_script_globals)
+script_locals.update(_main_locals)
+
+if script_locals:
+    shell.user_ns.update(script_locals)
+
+shell.user_ns["_script_locals"] = script_locals
 
 # ---------------------------------------------------------------------------
 # Export the complete exception call chain.
