@@ -398,6 +398,10 @@ if not _debug_mode:
     _old_trace = sys.gettrace()
     sys.settrace(_capture_main)
 
+    real_tb = shell.InteractiveTB
+    capture_tb = _ExceptionCaptureTB(real_tb)
+    shell.InteractiveTB = capture_tb
+
     try:
         # _t0 = time.perf_counter()
         shell.run_line_magic("run", RUN_ARGUMENTS)
@@ -407,6 +411,11 @@ if not _debug_mode:
         # )
     finally:
         sys.settrace(_old_trace)
+        shell.InteractiveTB = real_tb
+        
+    if capture_tb.traceback is not None:
+        _capture_exception_locals_from_exception(capture_tb.exception)
+
 else:
     # -----------------------------------------------------------------------
     # Let ipdb have exclusive control of tracing. IPython's %run -d
