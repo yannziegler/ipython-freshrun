@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ipython-freshrun"
-version = "0.1.0b1"
+version = "0.1.0b2"
 description = "Run Python scripts in genuinely fresh interactive IPython sessions"
 readme = "README.md"
 requires-python = ">=3.10"

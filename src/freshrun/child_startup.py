@@ -8,6 +8,7 @@ from IPython.terminal.prompts import Prompts
 from pygments.token import Token
 
 from freshrun.tools import InjectPullMagics
+from freshrun.freshimport import FreshImportMagics
 from freshrun.freshrun import FRESHRUN_HELP
 
 
@@ -19,6 +20,10 @@ EXIT_RESTART = 42
 # ---------------------------------------------------------------------------
 
 shell = get_ipython()
+
+_project_root = os.environ.get("FRESHRUN_PROJECT_ROOT")
+if _project_root:
+    shell.user_ns["_freshrun_project_root"] = _project_root
 
 _FRESH_SCRIPT_NAME = os.environ.get("FRESH_SCRIPT_NAME")
 _FRESH_RUN_ARGUMENTS = os.environ.get("FRESH_RUN_ARGUMENTS")
@@ -124,4 +129,5 @@ class FreshChildMagics(Magics):
     freshrun.__doc__ = FRESHRUN_HELP
 
 shell.register_magics(FreshChildMagics)
+shell.register_magics(FreshImportMagics)
 shell.register_magics(InjectPullMagics)

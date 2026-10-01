@@ -6,11 +6,15 @@ Run Python scripts and/or use REPL in a genuinely fresh, interactive IPython ses
 
 The main motivation is to make it easy and reliable to repeatedly run a script from an absolutely clean Python process, while still being able to inspect its resulting state interactively using all the bells and whistles of IPython.
 
+If running a full script repeatedly is not what you need, `ipython-freshrun` also provides `%freshimport`, which only reloads the modules from your current project. It ensures that all modules, classes, functions or any other module-level objects are fully reloaded in the current session.
+
 `freshrun` is currently maintained by Yann Ziegler. The proof-of-concept and initial version were designed by Yann Ziegler and written by ChatGPT (due to a lack of knowledge on IPython low-level mechanisms and strong time constraints, if you ask). This project was inspired by Jeanne's creative way of using IPython.
 
 ## Features
 
-- Run a Python script in a completely fresh IPython process every time with `%freshrun my_script.py`
+### %freshrun
+
+- Run a Python script in a completely fresh IPython process every time with `%freshrun my_script.py`.
 - ...or simply start a fresh interactive child without running a script with `%freshrun`.
 - Invoke a `%freshrun` command directly from inside a child without having to go back to the parent IPython session (automatic child replacement).
 - Keep the child IPython session interactive after the script finishes.
@@ -24,9 +28,17 @@ The main motivation is to make it easy and reliable to repeatedly run a script f
 - Similarly, inject all entries from any dictionary into the current namespace with `%inject`.
 - All of this, while keeping the parent IPython session intact and only replacing the child sessions.
 
-`ipython-freshrun` is an **IPython extension**. It is intended for terminal IPython use and does not provide Jupyter-specific functionality.
+### %freshimport
 
-### Why use a fresh process?
+- Reload all the modules previously loaded in the current IPython namespace (excluding system-level and environment modules) with `%freshimport`.
+- Either set your local project folder when starting a child session with `%freshrun --project ~/my_project` or let `freshrun` discover it from your script location with `%freshrun my_script.py`...
+- ...then discover and import/reload all your project modules with `%freshimport --all`.
+- Increase the verbosity of `%freshimport` with `-v` or `-vv` to see how many and which Python objects were actually reloaded.
+
+_**Note:**_`ipython-freshrun` is an **IPython extension**. It is intended for terminal IPython use and does not provide Jupyter-specific functionality.
+
+
+## Incentive: Why use a fresh process?
 
 A normal `%run` leaves the Python process itself untouched.
 
@@ -57,7 +69,7 @@ Fresh Python process
 
 When you exit that child, control returns to the original parent IPython session.
 
-#### Interactive child sessions
+### Interactive child sessions
 
 The child session uses a custom prompt showing the script that was launched:
 
@@ -111,6 +123,8 @@ When `%freshrun` is used without a script, the child displays:
 ```
 
 No script is executed in this case, but the child otherwise behaves like a normal fresh IPython session.
+
+`%freshimport` has a behaviour similar to `%freshrun`, but is limited to modules reloading. It triggers a full reload of current user modules (or of all project-level modules with `--all`), while keeping the current session alive and preserving the current namespace (apart from reloaded modules of course). Even if their internal mechanisms are quite different, you may think about `%freshimport` as a fine-grained version of `%freshrun` for modules only.
 
 ---
 
@@ -223,11 +237,17 @@ The basic syntax is:
 
 ```
 %freshrun
-%freshrun script.py [args...]
+%freshrun --project ~/my_project
+%freshrun [--project ~/my_project] my_script.py [args...]
 %freshrun --help
 ```
+To display the command documentation, you may also use, following IPython convention:
 
-With no arguments, %freshrun starts a completely fresh, interactive IPython child without running any script:
+```
+%freshrun?
+```
+
+With no arguments, `%freshrun` starts a completely fresh, interactive IPython child without running any script:
 
 ```
 %freshrun
@@ -241,10 +261,10 @@ The child is a normal interactive IPython session. It uses a generic prompt:
 
 You can use this mode when you simply want a clean Python/IPython process without initially running a script.
 
-To display the command documentation:
+Alternatively, you may provide a project path, which will be used by `%freshimport` (see next subsection):
 
 ```
-%freshrun --help
+%freshrun --project ~/my_project
 ```
 
 When a script is specified, it is executed in a newly created IPython process.
@@ -258,7 +278,7 @@ For example:
 or:
 
 ```
-%freshrun example.py first second
+%freshrun example.py foo bar "another argument"
 ```
 
 The script is executed in a newly created IPython process.
@@ -271,43 +291,29 @@ This is different from simply executing:
 %run example.py
 ```
 
-because `%run` executes inside the current IPython process, whereas `%freshrun` deliberately creates a new Python/IPython process.
+because `%run` executes inside the current IPython process, whereas `%freshrun` deliberately creates a new Python/IPython process. `%freshrun` accepts the relevant `%run`-style arguments, however, such as `%freshrun -d example.py` (see below for debugging with `freshrun`). Please note that `%freshrun -m` is an exception here, it is not supported intentionally due to `freshrun`'s internal mechanisms.
 
 
-## `%inject` and `%pull`
+## `%freshimport`
 
-The `%inject` magic copies all entries from a dictionary into the current IPython namespace:
-
-```
-%inject my_dict
-```
-or
-```
-%inject {'a': 1, 'b': 2}
-```
-
-For example, if `my_dict` contains `{"x": 10, "y": 20}`, both `x` and `y` become directly available in the session.
-
-The `%pull` magic populates the current namespace using an entry from the `_exception_locals` dictionary (see below for exceptions handling). For a given function or method name as listed in `_exception_locals.keys()`, an entry corresponds to all the locals of that function or method when the exception occurred. For example,
+`%freshimport` has a behaviour similar to `%freshrun`, but is limited to modules reloading. Even if their internal mechanisms are quite different, you may think about `%freshimport` as a fine-grained version of `%freshrun` for modules only.
 
 ```
-%pull main.some_module.my_func
+%freshimport
 ```
 
-makes all the locals from `main.some_module.my_func` (before the exception was raised) directly available in the current IPython child session.
+triggers a full reload of user modules which are already loaded in the current namespace, while keeping the current session alive and preserving other objects in the namespace.
 
-Note the strict equivalence between:
+When used jointly with `%freshrun my_script.py`, `%freshimport` distinguishes between actual user modules and system-level (or other non-user modules) using the script path and assuming that it points to a project folder where the modules reside (unless the script is in the user home directory, to avoid spurious reloading of modules from environments or other projects stored by the user in its home directory).
+
+As mentioned above, you can explicitly define your project folder when starting a child IPython session using `%freshrun --project ~/my_project my_script.py`.
+
+Once the project folder is known, you can force the discovery and import of all project-level modules using:
 ```
-%pull main.some_module.my_func
-```
-and
-```
-%inject _exception_locals['main.some_module.my_func']
+%freshimport --all
 ```
 
-Thus, `%pull` may be seen as a handy alias for `%inject` when the intent is to populate the namespace with locals from a given function or method once an exception has been raised.
-
-Both magics are available in the parent IPython session and fresh child sessions, but only `%inject` may be useful in the parent (of course, because `_exception_locals` is only set after an exception occurs in a child).
+_**Beware:**_ reloading modules in Python is not a trivial task and `%freshimport` is still an experimental command. Please report any unexpected behaviour.
 
 
 ## `main()` locals
@@ -315,11 +321,13 @@ Both magics are available in the parent IPython session and fresh child sessions
 When a conventional script contains:
 
 ```
+import my_module
+
 A = 'global'
 
 def main():
-    x = 123
-    y = "hello"
+    x = 42
+    s = "hello"
 
 if __name__ == "__main__":
     main()
@@ -339,7 +347,13 @@ For example:
 
 ```
 In [1]: _script_locals
-Out[1]: {'A': 'global', 'x': 123, 'y': 'hello'}
+Out[1]: {
+    'my_module': <module 'my_module' from 'my_module.py'>,
+    'A': 'global',
+    'main': <function __main__.main(argv)>,
+    'x': 42,
+    's': 'hello'
+    }
 ```
 
 The capture is specifically concerned with the script being executed. It does not attempt to serialize arbitrary Python objects between processes; the objects remain in the child process where they were created.
@@ -358,16 +372,19 @@ _exception_locals
 For example, a script might contain:
 
 ```
-def deep():
-    z = 42
-    raise RuntimeError("something went wrong")
+from my_module import deep
+
+## Defined in my_module:
+# def deep():
+#     z = 3
+#     raise RuntimeError("something went wrong")
 
 def inner():
-    y = 10
+    y = 2
     deep()
 
 def main():
-    x = 456
+    x = 1
     inner()
 
 if __name__ == "__main__":
@@ -378,15 +395,22 @@ After the exception, `_exception_locals` can contain entries corresponding to th
 
 ```
 {
-    "deep": {
-        "z": 42,
+    'my_script.my_module.deep': {
+        'z': 3,
     },
-    "inner": {
-        "y": 10,
+    'my_script.inner': {
+        'y': 2,
     },
-    "main": {
-        "x": 456,
+    'my_script.main': {
+        'argv': ['my_script.py'],
+        'x': 1,
     },
+    'my_script': {
+        'deep': <function my_module.deep()
+        'inner': <function __main__.inner()>,
+        'main': <function __main__.main(argv)>,
+    },
+
 }
 ```
 
@@ -395,9 +419,49 @@ The exact contents naturally depend on the state of the frames at the time of th
 A short notification is printed when exception locals have been captured:
 
 ```
-[freshrun: exception locals() captured in _exception_locals]
-  deep → inner → main
+[%freshrun: exception locals() captured in _exception_locals]
+  my_script.my_module.deep → my_script.inner → my_script.main → my_script
 ```
+
+You can check this again later simply by displaying `_exception_locals.keys()`.
+
+_**Tips:**_ if you would like to inspect your script variables up to a certain location in your code without having to use a full-fledged debugger (see below), you may simply raise an exception at the location of your choice and take advantage of `%freshrun` exception handling. You can even interrupt your script with a `KeyboardInterrupt` (Ctrl+C) at any time and populate your current namespace with all the preserved locals for further manual inspection or processing (see next subsection).
+
+
+## `%inject` and `%pull`
+
+The `%inject` magic copies all entries from a dictionary into the current IPython namespace:
+
+```
+%inject my_dict
+```
+or
+```
+%inject {'a': 1, 'b': 2}
+```
+
+For example, if `my_dict` contains `{"x": 10, "y": 20}`, both `x` and `y` become directly available in the session.
+
+The `%pull` magic populates the current namespace using an entry from the `_exception_locals` dictionary (see above for exceptions handling). For a given function or method name as listed in `_exception_locals.keys()`, an entry corresponds to all the locals of that function or method when the exception occurred. For example, if `_exception_locals` has a key `my_script.my_module.my_func`,
+
+```
+%pull my_script.my_module.my_func
+```
+
+makes all the locals from `my_script.my_module.my_func` (before the exception was raised) directly available in the current IPython child session.
+
+Note the strict equivalence between:
+```
+%pull my_script.my_module.my_func
+```
+and
+```
+%inject _exception_locals['my_script.my_module.my_func']
+```
+
+Thus, `%pull` may be seen as a handy alias for `%inject` when the intent is to populate the namespace with locals from a given function or method once an exception has been raised.
+
+Both magics are available in the parent IPython session and fresh child sessions, but only `%inject` may be useful in the parent (of course, because `_exception_locals` is only set after an exception occurs in a child).
 
 
 ## Debugging with `-d`
@@ -421,46 +485,6 @@ For example:
 The fresh child is still a separate IPython process; the debugger operates inside that child.
 
 The debug path intentionally leaves tracing under IPython/IPDB's control rather than installing the normal `sys.settrace()` capture mechanism at the same time.
-
-
-## Passing script arguments
-
-Arguments can be passed just as they can with `%run`:
-
-```
-%freshrun example.py foo bar
-```
-
-Quoted arguments are supported:
-
-```
-%freshrun example.py "hello world" "another argument"
-```
-
-The complete `%freshrun` argument list is retained and passed through to IPython's `%run` implementation.
-
-
-## `%run` options
-
-`%freshrun` accepts the relevant `%run`-style arguments used by the extension.
-
-For example:
-
-```
-%freshrun -d example.py
-```
-
-The script itself is identified from the argument list so that `%freshrun` knows which file's frames should be monitored.
-
-Module execution with:
-
-```
-%freshrun -m some_module
-```
-
-is intentionally not supported.
-
-The command requires a physical script file because the locals-capture mechanism identifies frames by the script filename.
 
 ---
 
@@ -506,19 +530,15 @@ This provides a convenient way to edit the command before executing it.
 The child is an ordinary interactive IPython process.
 
 You can leave it with:
-
 ```
 exit
 ```
-
 or:
-
 ```
 quit
 ```
 
 You can also use the normal terminal EOF shortcut:
-
 ```
 Ctrl+D
 ```
@@ -667,11 +687,13 @@ rather than:
 
 The locals-capture mechanism relies on identifying frames belonging to a particular script file.
 
+
 ## Only the target script is monitored
 
 Frame capture is restricted to frames whose filename matches the script being executed.
 
 This prevents unrelated library frames from being included in `_exception_locals`.
+
 
 ## Locals are copied, not serialized
 
@@ -680,6 +702,14 @@ The child and parent are separate processes.
 The captured `main()` locals are copied within the child IPython namespace; they are not sent back to the parent process.
 
 Consequently, the objects remain owned by the fresh child process and are lost after you leave the child.
+
+
+## Fresh imports/reloading is limited to project
+
+When reloading modules with `%freshimport`, only user-level modules currently loaded in the namespace and not part of the system or local environment are reloaded.
+
+Similarly, when a project path has been provided with `%freshrun --project ./path/to/my/project` or deduced from the current script path, only project-level modules are reloaded or imported with `%freshimport --all`.
+
 
 ## Terminal IPython
 
@@ -732,6 +762,20 @@ _exception_locals
 
 to examine the locals captured from the exception call chain.
 
+You may want to pull locals into your current namespace using
+
+```
+%pull some_key_in_exception_locals
+```
+
+If you modified one of your modules in the meantime and don't want to start a new, empty session (which would mean losing all the current namespace), you may only reload your modules using
+
+```
+%freshimport
+```
+
+and keep working interactively.
+
 For debugging:
 
 ```
@@ -748,9 +792,11 @@ You can also start with a completely clean interactive child:
 %freshrun
 ```
 
-This is useful when you want a fresh interpreter but do not want to run a script immediately. You can then work interactively as with any usual IPython REPL. This approach is very similar to leaving IPython entirely and launching it again, with the only but major difference being that your main session always remains alive.
+This is useful when you want a fresh interpreter but do not want to run a script immediately. You can then work interactively as with any usual IPython REPL. This approach is very similar to leaving IPython entirely and launching it again, with the main difference being that your main session always remains alive.
 
-Once you are done, you can leave the child session and come back to your parent session or start another blank-slate session from inside the child with Alt+Enter (or using `%freshrun` again), or even directly replace the current child session with any other %freshrun command, as described in the previous subsection.
+Another significant advantage of using `freshrun`, even without running a script, is the capability to use `%freshimport` magic, which will let you update modules that you have manually imported, without having to care about partial auto-reloading.
+
+Once you are done, you can leave the child session and come back to your parent session or start another blank-slate session from inside the child with Alt+Enter (or using `%freshrun` again), or even directly replace the current child session with any other `%freshrun` command, as described in the previous subsection.
 
 ---
 
@@ -782,6 +828,7 @@ The implementation deliberately keeps the parent and child programs separate:
 src/freshrun/
 ├── __init__.py
 ├── freshrun.py
+├── freshimport.py
 ├── child_startup.py
 └── child_capture.py
 └── tools.py
@@ -790,6 +837,10 @@ src/freshrun/
 ### `freshrun.py`
 
 Contains the parent IPython extension and `%freshrun` implementation.
+
+### `freshimport.py`
+
+Contains the additional `%freshimport` magic.
 
 ### `child_startup.py`
 

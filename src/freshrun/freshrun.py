@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from importlib import resources
+from pathlib import Path
 
 from IPython.core.magic import Magics, line_magic, magics_class
 from prompt_toolkit import print_formatted_text
@@ -24,7 +25,9 @@ _CHILD_CAPTURE = "child_capture.py"
 FRESHRUN_HELP = """\
 Usage:
     %freshrun
+    %freshrun --project PATH
     %freshrun [%run args...] script.py [script args...]
+    %freshrun --project PATH [%run args...] script.py [script args...]
     %freshrun --help
 
 Note: %freshrun accepts all %run args, except -m which is not supported.
@@ -34,8 +37,17 @@ Start a genuinely fresh, interactive IPython child session.
 With no arguments:
     Start a fresh child session without running a script.
 
+With --project PATH:
+    Start a fresh child session with PATH as its project root.
+    This is useful when starting a blank child session for a project.
+
 With a script:
     Start a fresh child session and run the script.
+    The script's directory is used as the project root.
+
+With --project PATH and a script:
+    Start a fresh child session and use PATH as the project root instead
+    of the script's directory.
 
 Inside the child:
     %freshrun
@@ -82,6 +94,51 @@ def _read_child_program(filename: str) -> str:
         .joinpath(filename)
         .read_text(encoding="utf-8")
     )
+
+
+def _extract_project_argument(
+    args: list[str],
+) -> tuple[Path | None, list[str]]:
+    """
+    Extract freshrun's --project PATH option.
+
+    The option is removed from the arguments subsequently passed to the
+    %run-compatible script machinery.
+    """
+    args = list(args)
+    project_root: Path | None = None
+    remaining: list[str] = []
+    i = 0
+
+    while i < len(args):
+        arg = args[i]
+
+        if arg == "--project":
+            if i + 1 >= len(args):
+                raise ValueError("--project requires a path")
+
+            project_root = Path(
+                os.path.abspath(
+                    os.path.expanduser(args[i + 1])
+                )
+            ).resolve()
+
+            i += 2
+            continue
+
+        if arg.startswith("--project="):
+            project_root = Path(
+                os.path.abspath(
+                    os.path.expanduser(arg.split("=", 1)[1])
+                )
+            ).resolve()
+            i += 1
+            continue
+
+        remaining.append(arg)
+        i += 1
+
+    return project_root, remaining
 
 
 def _find_script_argument(args: list[str]) -> str | None:
@@ -255,16 +312,22 @@ class FreshRunMagics(Magics):
             print(FRESHRUN_HELP)
             return
 
+        try:
+            explicit_project_root, run_args = _extract_project_argument(args)
+        except ValueError as exc:
+            print(f"%freshrun: {exc}")
+            return
+
         script_path = _find_script_argument(args)
 
-        if args and script_path is None:
+        if run_args and script_path is None:
             print(
                 "%freshrun currently requires a script file "
                 "(%run -m is not supported)."
             )
             return
 
-        if args:
+        if script_path is not None:
             script_path = os.path.abspath(
                 os.path.expanduser(script_path)
             )
@@ -273,6 +336,15 @@ class FreshRunMagics(Magics):
                 print(f"Script not found: {script_path}")
                 return
 
+        if explicit_project_root is not None:
+            if not explicit_project_root.is_dir():
+                print(
+                    f"Project directory not found: "
+                    f"{explicit_project_root}"
+                )
+                return
+
+        if args:
             # Remember the complete command so Alt+Enter can reproduce it.
             self.last_freshrun = shlex.join(args)
 
@@ -306,13 +378,47 @@ class FreshRunMagics(Magics):
                 except FileNotFoundError:
                     pass
 
+                try:
+                    explicit_project_root, run_args = _extract_project_argument(
+                        current_args
+                    )
+                except ValueError as exc:
+                    print(f"%freshrun: {exc}")
+                    break
+
+                script_path = _find_script_argument(run_args)
+
+                # A script establishes the project root automatically.
+                # An explicit --project overrides it.
+                if explicit_project_root is not None:
+                    project_root = explicit_project_root
+                elif script_path is not None:
+                    project_root = Path(
+                        os.path.abspath(
+                            os.path.expanduser(script_path)
+                        )
+                    ).resolve().parent
+
+                    # Never infer $HOME as a project root. This would make the entire
+                    # user's environment look like project code.
+                    if project_root == Path.home().resolve():
+                        project_root = None
+                else:
+                    project_root = None
+
                 # ----------------------------------------------------------
                 # Bare %freshrun: start a fresh child without a script.
                 # ----------------------------------------------------------
 
-                if not current_args:
+                if not run_args:
                     env = os.environ.copy()
                     env["FRESHRUN_REQUEST"] = request_file
+
+                    if project_root is None:
+                        env.pop("FRESHRUN_PROJECT_ROOT", None)
+                    else:
+                        env["FRESHRUN_PROJECT_ROOT"] = str(project_root)
+
                     env.pop("FRESH_SCRIPT_NAME", None)
                     env.pop("FRESH_RUN_ARGUMENTS", None)
 
@@ -324,18 +430,7 @@ class FreshRunMagics(Magics):
                     command = (
                         f"exec(open({startup_file!r}, encoding='utf-8').read())"
                     )
-                    # proc = subprocess.run(
-                    #     [
-                    #         sys.executable,
-                    #         "-m",
-                    #         "IPython",
-                    #         "--no-banner",
-                    #         "-i",
-                    #         "-c",
-                    #         command,
-                    #     ],
-                    #     env=env,
-                    # )
+
                     proc = _run_fresh_child(
                         [
                             sys.executable,
@@ -349,8 +444,9 @@ class FreshRunMagics(Magics):
                         env,
                     )
                 else:
+                    # current_script = _find_script_argument(current_args)
+                    current_script = script_path
                     run_arguments = shlex.join(current_args)
-                    current_script = _find_script_argument(current_args)
 
                     if current_script is None:
                         print("Could not determine the script to monitor.")
@@ -392,6 +488,11 @@ class FreshRunMagics(Magics):
                     # Tell the user what is about to happen.
                     # ------------------------------------------------------
 
+                    if project_root is None:
+                        env.pop("FRESHRUN_PROJECT_ROOT", None)
+                    else:
+                        env["FRESHRUN_PROJECT_ROOT"] = str(project_root)
+
                     _print_freshrun_status(script_name)
 
                     if first_child:
@@ -428,18 +529,6 @@ class FreshRunMagics(Magics):
                         f"encoding='utf-8').read())"
                     )
 
-                    # proc = subprocess.run(
-                    #     [
-                    #         sys.executable,
-                    #         "-m",
-                    #         "IPython",
-                    #         "--no-banner",
-                    #         "-i",
-                    #         "-c",
-                    #         command,
-                    #     ],
-                    #     env=env,
-                    # )
                     proc = _run_fresh_child(
                         [
                             sys.executable,
